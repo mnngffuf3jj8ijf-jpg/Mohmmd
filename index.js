@@ -2,6 +2,7 @@ const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion 
 const pino = require("pino");
 
 async function startBot() {
+    // إعداد تخزين الجلسة لضمان بقاء البوت متصلاً
     const { state, saveCreds } = await useMultiFileAuthState('session_data');
     const { version } = await fetchLatestBaileysVersion();
 
@@ -10,28 +11,38 @@ async function startBot() {
         logger: pino({ level: 'silent' }),
         auth: state,
         printQRInTerminal: false,
-        // تغيير الهوية لتبدو كمتصفح سفاري على ماك
-        browser: ["Safari", "MacOS", "14.1.2"] 
+        // تزييف الهوية لتظهر كمتصفح Chrome رسمي على Windows 10
+        // هذا ما سيجعل واتساب يرسل لك "إشعار طلب الربط"
+        browser: ["Windows", "Chrome", "122.0.6261.112"] 
     });
 
+    // التحقق إذا كان الحساب غير مسجل للبدء بالربط
     if (!sock.authState.creds.registered) {
-        const phoneNumber = "967738044053";
+        const phoneNumber = "967781166304"; 
         
-        // انتظار 20 ثانية لضمان استقرار السيرفر قبل طلب الكود
+        // تأخير 20 ثانية لضمان أن السيرفر مستقر تماماً قبل إرسال الطلب
         setTimeout(async () => {
             try {
                 const code = await sock.requestPairingCode(phoneNumber);
-                console.log(`\n✅ الكود المطلوب: ${code}\n`);
+                console.log(`\n========================================`);
+                console.log(`🚀 كود الربط من متصفح Chrome: ${code}`);
+                console.log(`⚠️ أدخل الكود الآن في واتساب ليصلك الإشعار فورا`);
+                console.log(`========================================\n`);
             } catch (error) {
-                console.log("❌ خطأ: واتساب يرفض الطلب حالياً، انتظر ساعة.");
+                console.log("❌ خطأ: واتساب يرفض الطلبات المتكررة حالياً. يرجى التوقف ساعة.");
             }
         }, 20000);
     }
 
     sock.ev.on('creds.update', saveCreds);
+
+    // مراقبة الاتصال لإعلامك بنجاح وصول الإشعار والربط
     sock.ev.on('connection.update', (update) => {
         const { connection } = update;
-        if (connection === 'open') console.log('✅ تم الربط بنجاح! البوت يعمل.');
+        if (connection === 'open') {
+            console.log('\n✅ مبروك! وصل إشعار الربط وتم الاتصال بنجاح.');
+        }
     });
 }
+
 startBot();
