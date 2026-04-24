@@ -1,30 +1,37 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
 const pino = require("pino");
-const readline = require("readline");
-
-// واجهة لإدخال رقم الهاتف من الكونسول عند الحاجة
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 async function startBot() {
+    // 1. إعداد حالة التخزين (حفظ الجلسة)
     const { state, saveCreds } = await useMultiFileAuthState('session_data');
     const { version } = await fetchLatestBaileysVersion();
 
+    // 2. إعداد الاتصال
     const sock = makeWASocket({
         version,
         logger: pino({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: false, // معطل لأننا سنستخدم كود الاقتران
+        printQRInTerminal: false, // معطل للاستضافات
         browser: ["Ubuntu", "Chrome", "20.0.04"]
     });
 
-    // --- آلية الاقتران بالكود ---
+    // 3. آلية الاقتران التلقائي برقمك (تعديل السيطرة)
     if (!sock.authState.creds.registered) {
-        const phoneNumber = await question('⚠️ أدخل رقم الهاتف المرتبط بالواتساب (مثال: 9677xxxxxxxx):\n');
-        const code = await sock.requestPairingCode(phoneNumber.replace(/[+ ]/g, ""));
-        console.log(`\n🔥 كود الربط الخاص بك هو: ${code}\n`);
-        console.log('افتح الواتساب > الأجهزة المرتبطة > ربط جهاز > الربط برقم الهاتف وأدخل الكود أعلاه.');
+        const phoneNumber = "967781166304"; // رقمك المعتمد
+        
+        // تأخير بسيط لضمان استقرار السيرفر قبل طلب الكود
+        setTimeout(async () => {
+            try {
+                const code = await sock.requestPairingCode(phoneNumber);
+                console.log(`\n========================================`);
+                console.log(`🔥 كود الربط الخاص بك هو: ${code}`);
+                console.log(`========================================\n`);
+                console.log('افتح الواتساب > الأجهزة المرتبطة > ربط جهاز > الربط برقم الهاتف وأدخل الكود أعلاه.');
+            } catch (error) {
+                console.error("فشل في طلب كود الربط:", error);
+            }
+        }, 3000);
     }
 
     sock.ev.on('creds.update', saveCreds);
@@ -51,41 +58,37 @@ async function startBot() {
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
         const isGroup = from.endsWith('@g.us');
 
-        // قائمة "الكلمات المحظورة" (أضف ما تشاء هنا)
-        const blacklist = ["مسبات", "روابط", "كلمة_سيئة"];
+        // قائمة "الكلمات المحظورة" (نظام الطرد التلقائي)
+        const blacklist = ["مسبات", "روابط", "شتم"];
         
         if (isGroup && blacklist.some(word => text.includes(word))) {
             try {
-                // حذف الرسالة المنتهكة
                 await sock.sendMessage(from, { delete: msg.key });
-                // طرد العضو المنتهك (يجب أن يكون البوت مشرفاً)
                 await sock.groupParticipantsUpdate(from, [msg.key.participant], "remove");
-                await sock.sendMessage(from, { text: "🛑 تم اكتشاف انتهاك.\nتم طرد العضو وتطهير المجموعة بنجاح." });
+                await sock.sendMessage(from, { text: "🛑 تم اكتشاف انتهاك للمجموعة.\nتم طرد العضو وتطهير الدردشة." });
             } catch (err) {
-                console.log("خطأ في تنفيذ العقوبة: تأكد أن البوت مشرف.");
+                console.log("خطأ: تأكد من رفع البوت لرتبة مشرف (Admin) للسيطرة.");
             }
         }
 
-        // أوامر السيطرة (خاصة بك فقط)
+        // أوامر الإضافة (للمطور فقط)
         if (text.startsWith('.add')) { 
             const numToAdd = text.split(' ')[1] + "@s.whatsapp.net";
             await sock.groupParticipantsUpdate(from, [numToAdd], "add");
-            await sock.sendMessage(from, { text: "✅ تم إضافة العضو بنجاح." });
+            await sock.sendMessage(from, { text: "✅ تم سحب العضو للمجموعة بنجاح." });
         }
     });
 
-    // --- إدارة الاتصال وإعادة التشغيل ---
+    // --- إعادة الاتصال التلقائي ---
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('جارٍ إعادة الاتصال...');
             if (shouldReconnect) startBot();
         } else if (connection === 'open') {
-            console.log('✅ البوت متصل الآن ومستعد للسيطرة الكاملة!');
+            console.log('✅ البوت متصل الآن! جاهز لتنفيذ الأوامر.');
         }
     });
 }
 
 startBot();
-
