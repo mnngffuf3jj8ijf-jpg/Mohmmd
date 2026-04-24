@@ -3,53 +3,52 @@ const { Boom } = require("@hapi/boom");
 const pino = require("pino");
 
 async function startBot() {
-    // 1. إعداد حالة التخزين (حفظ الجلسة)
+    // إعداد حفظ الجلسة
     const { state, saveCreds } = await useMultiFileAuthState('session_data');
     const { version } = await fetchLatestBaileysVersion();
 
-    // 2. إعداد الاتصال
     const sock = makeWASocket({
         version,
         logger: pino({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: false, // معطل للاستضافات
-        browser: ["Ubuntu", "Chrome", "20.0.04"]
+        printQRInTerminal: false,
+        // تغيير هوية المتصفح لتجنب الحظر (بصمة Mac OS)
+        browser: ["Mac OS", "Chrome", "110.0.5481.177"] 
     });
 
-    // 3. آلية الاقتران التلقائي برقمك (تعديل السيطرة)
+    // آلية طلب الكود بتأخير زمني ذكي (15 ثانية) لتجنب خطأ 428
     if (!sock.authState.creds.registered) {
-        const phoneNumber = "967781166304"; // رقمك المعتمد
+        const phoneNumber = "967781166304"; 
         
-        // تأخير بسيط لضمان استقرار السيرفر قبل طلب الكود
+        console.log("⏳ انتظر 15 ثانية.. يتم الآن تحضير طلب الكود بشكل آمن...");
         setTimeout(async () => {
             try {
                 const code = await sock.requestPairingCode(phoneNumber);
                 console.log(`\n========================================`);
-                console.log(`🔥 كود الربط الخاص بك هو: ${code}`);
+                console.log(`🔥 كود الربط الجديد: ${code}`);
                 console.log(`========================================\n`);
-                console.log('افتح الواتساب > الأجهزة المرتبطة > ربط جهاز > الربط برقم الهاتف وأدخل الكود أعلاه.');
             } catch (error) {
-                console.error("فشل في طلب كود الربط:", error);
+                console.log("❌ فشل في طلب الكود. يرجى الانتظار 10 دقائق قبل إعادة المحاولة.");
             }
-        }, 3000);
+        }, 15000); 
     }
 
     sock.ev.on('creds.update', saveCreds);
 
-    // --- نظام الترحيب بالأعضاء الجدد ---
+    // --- نظام السيطرة والترحيب ---
     sock.ev.on('group-participants.update', async (update) => {
         const { id, participants, action } = update;
         if (action === 'add') {
             for (let num of participants) {
                 await sock.sendMessage(id, { 
-                    text: `⚠️ نظام الحماية مفعل.\nمرحباً بك @${num.split('@')[0]}.\nالتزم بالقوانين لتجنب الطرد التلقائي.`, 
+                    text: `⚠️ نظام الحماية النشط.\nمرحباً بك @${num.split('@')[0]}.\nأي محاولة تخريب تعني الطرد الفوري.`, 
                     mentions: [num] 
                 });
             }
         }
     });
 
-    // --- محرك السيطرة، الحذف، والطرد ---
+    // --- محرك الفلترة والطرد ---
     sock.ev.on('messages.upsert', async (chat) => {
         const msg = chat.messages[0];
         if (!msg.message || msg.key.fromMe) return;
@@ -58,35 +57,28 @@ async function startBot() {
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
         const isGroup = from.endsWith('@g.us');
 
-        // قائمة "الكلمات المحظورة" (نظام الطرد التلقائي)
-        const blacklist = ["مسبات", "روابط", "شتم"];
+        // الكلمات المحظورة
+        const blacklist = ["مسبات", "روابط", "شتم", "قحبه", "منيوك"];
         
         if (isGroup && blacklist.some(word => text.includes(word))) {
             try {
                 await sock.sendMessage(from, { delete: msg.key });
                 await sock.groupParticipantsUpdate(from, [msg.key.participant], "remove");
-                await sock.sendMessage(from, { text: "🛑 تم اكتشاف انتهاك للمجموعة.\nتم طرد العضو وتطهير الدردشة." });
+                await sock.sendMessage(from, { text: "🛑 تم تنظيف المجموعة من المخربين." });
             } catch (err) {
-                console.log("خطأ: تأكد من رفع البوت لرتبة مشرف (Admin) للسيطرة.");
+                console.log("البوت يحتاج صلاحية مشرف للسيطرة.");
             }
-        }
-
-        // أوامر الإضافة (للمطور فقط)
-        if (text.startsWith('.add')) { 
-            const numToAdd = text.split(' ')[1] + "@s.whatsapp.net";
-            await sock.groupParticipantsUpdate(from, [numToAdd], "add");
-            await sock.sendMessage(from, { text: "✅ تم سحب العضو للمجموعة بنجاح." });
         }
     });
 
-    // --- إعادة الاتصال التلقائي ---
+    // --- إدارة الاتصال ---
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) startBot();
         } else if (connection === 'open') {
-            console.log('✅ البوت متصل الآن! جاهز لتنفيذ الأوامر.');
+            console.log('✅ السيطرة اكتملت! البوت متصل الآن.');
         }
     });
 }
