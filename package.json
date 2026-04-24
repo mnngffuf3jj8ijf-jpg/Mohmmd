@@ -1,17 +1,19 @@
 {
   "name": "master-bot",
   "version": "1.0.0",
-  "description": "WhatsApp Admin Bot",
+  "description": "WhatsApp Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "latest",
-    "@hapi/boom": "latest",
-    "pino": "latest",
-    "readline": "latest",
-    "qrcode-terminal": "latest"
+    "@whiskeysockets/baileys": "^6.6.0",
+    "@hapi/boom": "^10.0.1",
+    "pino": "^8.19.0",
+    "qrcode-terminal": "^0.12.0",
+    "readline": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
-
