@@ -18,7 +18,7 @@ async function startBot() {
 
     // التحقق إذا كان الحساب غير مسجل للبدء بالربط
     if (!sock.authState.creds.registered) {
-        const phoneNumber = "967781166304"; 
+        const phoneNumber = "+967781166304"; 
         
         // تأخير 20 ثانية لضمان أن السيرفر مستقر تماماً قبل إرسال الطلب
         setTimeout(async () => {
